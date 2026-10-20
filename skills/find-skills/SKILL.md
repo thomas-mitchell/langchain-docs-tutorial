@@ -7,6 +7,21 @@ description: Helps users discover and install agent skills when they ask questio
 
 This skill helps you discover and install skills from the open agent skills ecosystem.
 
+## Where Skills Are Installed
+
+This agent loads its skills from the `skills/` folder in its working directory
+(one subfolder per skill, each containing a `SKILL.md`). Skills must be
+installed there, and nowhere else:
+
+- Always install at project level (in the working directory). Never use `-g` / `--global`.
+- Always pass `--agent openclaw --copy`. The Skills CLI has no option for a custom
+  folder, but the `openclaw` agent's project folder is `skills/`, so this puts the
+  skill in `skills/<skill-name>/`. It does not install anything for OpenClaw or any
+  other coding agent, so do not "correct" this to another agent name.
+- `--copy` writes real files instead of symlinks, which need extra permissions on Windows.
+- Shell commands get no keyboard input, so always use `npx --yes` and the CLI's `-y`
+  flag, or the command will hang waiting for a confirmation.
+
 ## When to Use This Skill
 
 Use this skill when the user:
@@ -24,9 +39,9 @@ The Skills CLI (`npx skills`) is the package manager for the open agent skills e
 
 **Key commands:**
 
-- `npx skills find [query] [--owner <owner>]` - Search for skills interactively or by keyword, optionally scoped to a GitHub owner
-- `npx skills add <package>` - Install a skill from GitHub or other sources
-- `npx skills update` - Update all installed skills
+- `npx --yes skills find [query] [--owner <owner>]` - Search for skills by keyword, optionally scoped to a GitHub owner
+- `npx --yes skills add <owner/repo> --skill <skill-name> --agent openclaw --copy -y` - Install one skill into `skills/<skill-name>/`
+- `npx --yes skills add <owner/repo> --list` - List the skills in a repository without installing anything
 
 **Browse skills at:** https://skills.sh/
 
@@ -53,14 +68,16 @@ For example, top skills for web development include:
 If the leaderboard doesn't cover the user's need, run the find command:
 
 ```bash
-npx skills find [query] [--owner <owner>]
+npx --yes skills find [query] [--owner <owner>]
 ```
 
 For example:
 
-- User asks "how do I make my React app faster?" → `npx skills find react performance`
-- User asks "can you help me with PR reviews?" → `npx skills find pr review`
-- User asks "I need to create a changelog" → `npx skills find changelog`
+- User asks "how do I make my React app faster?" → `npx --yes skills find react performance`
+- User asks "can you help me with PR reviews?" → `npx --yes skills find pr review`
+- User asks "I need to create a changelog" → `npx --yes skills find changelog`
+
+Search results are listed as `<owner/repo>@<skill-name>`.
 
 ### Step 4: Verify Quality Before Recommending
 
@@ -76,8 +93,7 @@ When you find relevant skills, present them to the user with:
 
 1. The skill name and what it does
 2. The install count and source
-3. The install command they can run
-4. A link to learn more at skills.sh
+3. A link to learn more at skills.sh
 
 Example response:
 
@@ -86,21 +102,31 @@ I found a skill that might help! The "react-best-practices" skill provides
 React and Next.js performance optimization guidelines from Vercel Engineering.
 (185K installs)
 
-To install it:
-npx skills add vercel-labs/agent-skills@react-best-practices
-
 Learn more: https://skills.sh/vercel-labs/agent-skills/react-best-practices
 ```
 
 ### Step 6: Offer to Install
 
-If the user wants to proceed, you can install the skill for them:
+Only install a skill when the user has asked you to. Split the search result
+`<owner/repo>@<skill-name>` into its two parts and run, from the working directory:
 
 ```bash
-npx skills add <owner/repo@skill> -g -y
+npx --yes skills add <owner/repo> --skill <skill-name> --agent openclaw --copy -y
 ```
 
-The `-g` flag installs globally (user-level) and `-y` skips confirmation prompts.
+For example, for `vercel-labs/agent-skills@react-best-practices`:
+
+```bash
+npx --yes skills add vercel-labs/agent-skills --skill react-best-practices --agent openclaw --copy -y
+```
+
+Then confirm that `skills/<skill-name>/SKILL.md` exists. The CLI also records the
+install in `skills-lock.json`; leave that file alone.
+
+Newly installed skills are only added to your skill list the next time the agent
+starts. To use one in the current conversation, read
+`skills/<skill-name>/SKILL.md` and follow its instructions. Tell the user it will be
+listed automatically from their next session.
 
 ## Common Skill Categories
 
@@ -128,7 +154,7 @@ If no relevant skills exist:
 
 1. Acknowledge that no existing skill was found
 2. Offer to help with the task directly using your general capabilities
-3. Suggest the user could create their own skill with `npx skills init`
+3. Suggest the user could create their own skill: a folder `skills/<skill-name>/` containing a `SKILL.md`
 
 Example:
 
@@ -136,6 +162,6 @@ Example:
 I searched for skills related to "xyz" but didn't find any matches.
 I can still help you with this task directly! Would you like me to proceed?
 
-If this is something you do often, you could create your own skill:
-npx skills init my-xyz-skill
+If this is something you do often, you could create your own skill
+in skills/my-xyz-skill/SKILL.md.
 ```
