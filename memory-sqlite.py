@@ -9,7 +9,7 @@ from dotenv import load_dotenv
 from langgraph.checkpoint.sqlite import SqliteSaver
 from langchain.tools import tool
 
-load_dotenv('.env')
+load_dotenv('keyfile.txt')
 
 @tool
 def get_weather(city: str) -> str:

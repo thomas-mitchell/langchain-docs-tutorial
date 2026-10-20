@@ -30,7 +30,7 @@ from fastmcp.client.transports import StdioTransport
 from langgraph.types import Command
 from mcp.client.stdio import get_default_environment
 
-load_dotenv('.env')
+load_dotenv('keyfile.txt')
 
 # LangChain sends traces to LangSmith automatically once tracing is switched on.
 # LANGSMITH_API_KEY (and LANGSMITH_ENDPOINT) come from .env.

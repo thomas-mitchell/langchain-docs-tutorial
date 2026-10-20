@@ -36,7 +36,7 @@ from deepagents.middleware.filesystem import FilesystemMiddleware
 from deepagents.middleware.skills import SkillsMiddleware
 from langchain_tavily import TavilySearch
 
-load_dotenv('.env')
+load_dotenv('keyfile.txt')
 
 # LangChain sends traces to LangSmith automatically once tracing is switched on.
 # LANGSMITH_API_KEY (and LANGSMITH_ENDPOINT) come from .env.

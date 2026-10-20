@@ -1,6 +1,6 @@
 from dotenv import load_dotenv
 
-load_dotenv('.env')
+load_dotenv('keyfile.txt')
 
 SYSTEM_PROMPT = """You are a literary data assistant.
 

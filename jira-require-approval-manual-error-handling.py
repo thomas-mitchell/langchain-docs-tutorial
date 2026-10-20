@@ -16,7 +16,7 @@ from langchain.messages import ToolMessage
 from langgraph.errors import GraphBubbleUp
 from langgraph.types import Command
 
-load_dotenv('.env')
+load_dotenv('keyfile.txt')
 
 # LangChain sends traces to LangSmith automatically once tracing is switched on.
 # LANGSMITH_API_KEY (and LANGSMITH_ENDPOINT) come from .env.

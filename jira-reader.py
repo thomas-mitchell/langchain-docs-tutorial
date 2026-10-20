@@ -12,7 +12,7 @@ from langchain_community.agent_toolkits.jira.toolkit import JiraToolkit
 from langchain_community.utilities.jira import JiraAPIWrapper
 from langchain.tools import tool
 
-load_dotenv('.env')
+load_dotenv('keyfile.txt')
 
 # LangChain sends traces to LangSmith automatically once tracing is switched on.
 # LANGSMITH_API_KEY (and LANGSMITH_ENDPOINT) come from .env.

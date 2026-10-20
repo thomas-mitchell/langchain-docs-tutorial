@@ -2,7 +2,7 @@
 from langchain.agents import create_agent
 from dotenv import load_dotenv
 
-load_dotenv('.env')
+load_dotenv('keyfile.txt')
 
 def get_weather(city: str) -> str:
     """Get weather for a given city."""
