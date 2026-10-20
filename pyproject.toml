@@ -1,0 +1,26 @@
+[project]
+name = "langchain-docs-tutorial"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+authors = [
+    { name = "thomasmitchellboom", email = "thomas.mitchell@boomworks.com.au" }
+]
+requires-python = ">=3.12"
+dependencies = [
+    "atlassian-python-api>=5.0.5",
+    "deepagents>=0.7.25",
+    "dotenv>=0.9.9",
+    "langchain>=1.4.6",
+    "langchain-anthropic>=1.7.6",
+    "langchain-community>=0.4.2",
+    "langchain-mcp-adapters>=0.3.2",
+    "langgraph-checkpoint-sqlite>=3.1.2",
+]
+
+[project.scripts]
+langchain-docs-tutorial = "langchain_docs_tutorial:main"
+
+[build-system]
+requires = ["uv_build>=0.12.5,<0.13.0"]
+build-backend = "uv_build"
