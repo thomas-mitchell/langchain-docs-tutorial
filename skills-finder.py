@@ -2,6 +2,7 @@
 # requires-python = ">=3.12"
 # dependencies = [
 #     "deepagents>=0.7.28",
+#     "langchain-tavily>=0.2.18",
 #     "langchain[anthropic,mcp]>=1.4.6",
 #     "python-dotenv",
 # ]
@@ -30,9 +31,10 @@ from langchain.mcp import MCPAdapter
 from fastmcp.client.transports import StdioTransport
 from langgraph.types import Command
 from mcp.client.stdio import get_default_environment
-from deepagents.backends import FilesystemBackend
+from deepagents.backends import LocalShellBackend
 from deepagents.middleware.filesystem import FilesystemMiddleware
 from deepagents.middleware.skills import SkillsMiddleware
+from langchain_tavily import TavilySearch
 
 load_dotenv('.env')
 
@@ -41,11 +43,16 @@ load_dotenv('.env')
 os.environ["LANGSMITH_TRACING"] = "true"
 os.environ.setdefault("LANGSMITH_PROJECT", "langsmith-testing")
 
-system_prompt=(
+system_prompt = (
     "You are a helpful assistant that answers questions about JIRA projects "
-    "and issues, and about the weather. Your replies are shown in a plain-text "
-    "terminal, so do not use emoji or Markdown formatting."
-),
+    "and issues, and about the weather. You can also search the web and run "
+    "shell commands, which you can use to find and install agent skills. "
+    "Shell commands run in cmd.exe on Windows with no keyboard input, so never "
+    "run anything that waits for input: pass flags such as --yes to npx "
+    "(e.g. npx --yes skills find <query>). "
+    "Your replies are shown in a plain-text terminal, so do not use emoji or "
+    "Markdown formatting."
+)
 
 # The MCP server runs as a separate process and only gets the environment
 # variables passed here, so hand it the Jira credentials (under the names
@@ -67,6 +74,10 @@ jira_server = StdioTransport(
 # as a local stdio server with the same Python interpreter as this script.
 weather_server = Path("mcp-server-custom-weather.py")
 
+# Tools added by FilesystemMiddleware that change files or run commands. These
+# always need approval. Its other tools (ls, read_file, glob, grep) only read.
+RISKY_LOCAL_TOOLS = ["write_file", "edit_file", "delete", "execute"]
+
 # By default a tool exception crashes the whole run. Send the error back to the
 # model instead so it can correct itself. Returning None would re-raise instead.
 def return_tool_errors(exc, request):
@@ -85,12 +96,21 @@ async def main():
         await run_agent(jira_tools + weather_tools)
 
 
-async def run_agent(tools):
-    # Both middleware components share the same backend.
-    backend = FilesystemBackend(
+async def run_agent(mcp_tools):
+    # Both middleware components share the same backend. LocalShellBackend is a
+    # FilesystemBackend that can also run commands, so FilesystemMiddleware adds
+    # an `execute` tool. virtual_mode only restricts the file tools; shell
+    # commands can reach anything this user can, hence the approval below.
+    # The shell gets only basic system variables (PATH etc.), not os.environ,
+    # so the API keys loaded from .env aren't visible to commands it runs.
+    backend = LocalShellBackend(
         root_dir=".",
         virtual_mode=True,
+        env=get_default_environment(),
     )
+
+    # Web search. Reads TAVILY_API_KEY from the environment.
+    web_search = TavilySearch(max_results=5)
 
     # MCP tools declare whether they only read data (read-only hint). Require
     # approval for every tool that isn't explicitly marked read-only, so new
@@ -101,22 +121,24 @@ async def run_agent(tools):
         mcp_tool = (t.metadata or {}).get("mcp", {}).get("tool", {})
         return mcp_tool.get("annotations", {}).get("read_only_hint") is True
 
-    interrupt_on = {t.name: not is_read_only(t) for t in tools}
+    interrupt_on = {t.name: not is_read_only(t) for t in mcp_tools}
+    interrupt_on |= {name: True for name in RISKY_LOCAL_TOOLS}
+    interrupt_on[web_search.name] = False  # only reads public web pages
 
     checkpointer = InMemorySaver()
     agent = create_agent(
         model="claude-sonnet-4-6",
-        tools=tools,
+        tools=mcp_tools + [web_search],
         system_prompt=system_prompt,
         checkpointer=checkpointer, # required for interrupts
         middleware=[
             HumanInTheLoopMiddleware(interrupt_on=interrupt_on),
-            ToolErrorMiddleware(return_tool_errors),  # last, so it wraps only the tool call itself
             FilesystemMiddleware(backend=backend),
             SkillsMiddleware(
                 backend=backend,
                 sources=["/skills/"],
             ),
+            ToolErrorMiddleware(return_tool_errors),  # last, so it wraps only the tool call itself
         ],
     )
 
