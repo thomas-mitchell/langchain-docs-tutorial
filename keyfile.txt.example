@@ -12,3 +12,5 @@ JIRA_CLOUD=
 
 # https://app.tavily.com
 TAVILY_API_KEY=
+
+HF_TOKEN=

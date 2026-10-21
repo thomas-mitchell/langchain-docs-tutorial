@@ -16,3 +16,6 @@ keyfile.txt
 
 # Local SQLite databases (e.g. memory demo checkpoints)
 *.db
+
+# Training files
+*.pdf
