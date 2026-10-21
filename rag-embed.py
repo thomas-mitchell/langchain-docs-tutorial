@@ -1,6 +1,6 @@
-# Step 1 of 2: reads the PDF (with OCR), splits it into chunks, embeds them and
+# Step 1 of 2: reads the PDFs (with OCR), splits them into chunks, embeds them and
 # saves them to a Milvus Lite database file. This is the slow part, so it only
-# needs running when the source document changes. Then use rag-retrieve.py to
+# needs running when the source documents change. Then use rag-retrieve.py to
 # ask questions against the saved database.
 import logging
 import os
@@ -8,7 +8,6 @@ import warnings
 from dotenv import load_dotenv
 from langchain_docling.loader import ExportType
 from docling.chunking import HybridChunker
-# from langchain_docling import DoclingLoader
 from langchain_docling.loader import DoclingLoader
 from langchain_huggingface.embeddings import HuggingFaceEmbeddings
 from langchain_milvus import Milvus
@@ -34,7 +33,17 @@ logging.getLogger("RapidOCR").addFilter(lambda record: record.levelno >= logging
 # Harmless performance note from PyTorch inside the OCR model
 warnings.filterwarnings("ignore", message="Using padding='same'")
 
-FILE_PATH = "Shadowrun3E-Core.pdf"
+# All files go into the one collection; each chunk's "source" metadata records
+# which file it came from.
+FILE_PATHS = [
+    "Shadowrun3E-Core.pdf",
+    "Shadowrun3E-Cannon-Companion.pdf",
+    "Shadowrun3E-Companion.pdf",
+    "Shadowrun3E-Magic-in-the-Shadows.pdf",
+    "Shadowrun3E-Man-and-Machine.pdf",
+    "Shadowrun3E-Matrix.pdf",
+    "Shadowrun3E-Rigger-3.pdf",
+]
 # Embedding model. It also sets the chunk size: HybridChunker reads the model's
 # max input length (512 tokens for bge-small-en-v1.5; all-MiniLM-L6-v2 was 256),
 # so chunks always fit what the model can embed.
@@ -47,17 +56,11 @@ COLLECTION_NAME = "docling_demo"
 
 
 loader = DoclingLoader(
-    file_path=FILE_PATH,
+    file_path=FILE_PATHS,
     export_type=EXPORT_TYPE,
     chunker=HybridChunker(tokenizer=EMBED_MODEL_ID)
 )
-# convert_kwargs={"page_range": (51, 54)}
-
 docs = loader.load()
-
-# Debug output
-# for d in docs[:3]:
-#     print(f"- {d.page_content=}")
 
 if EXPORT_TYPE == ExportType.DOC_CHUNKS:
     splits = docs
@@ -71,14 +74,16 @@ elif EXPORT_TYPE == ExportType.MARKDOWN:
             ("###", "Header_3"),
         ],
     )
-    splits = [split for doc in docs for split in splitter.split_text(doc.page_content)]
+    # split_text only sees the text, so each split gets just the header
+    # metadata. Copy the whole document's metadata (including "source") back
+    # onto its splits so they can still be traced to their file.
+    splits = []
+    for doc in docs:
+        for split in splitter.split_text(doc.page_content):
+            split.metadata = {**doc.metadata, **split.metadata}
+            splits.append(split)
 else:
     raise ValueError(f"Unexpected export type: {EXPORT_TYPE}")
-
-# Debug output
-# for d in splits[:3]:
-#     print(f"- {d.page_content=}")
-# print("...")
 
 embedding = HuggingFaceEmbeddings(model_name=EMBED_MODEL_ID)
 
@@ -94,4 +99,4 @@ vectorstore = Milvus.from_documents(
     drop_old=True,
 )
 
-print(f"Stored {len(splits)} chunks from {FILE_PATH} in {MILVUS_URI} (collection '{COLLECTION_NAME}')")
+print(f"Stored {len(splits)} chunks from {', '.join(FILE_PATHS)} in {MILVUS_URI} (collection '{COLLECTION_NAME}')")

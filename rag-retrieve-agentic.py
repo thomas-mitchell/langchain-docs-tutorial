@@ -46,11 +46,18 @@ if not Path(MILVUS_URI).exists():
 
 embedding = HuggingFaceEmbeddings(model_name=EMBED_MODEL_ID)
 
-# Open the existing collection (no documents added, nothing dropped)
+# Open the existing collection (no documents added, nothing dropped).
+# pymilvus pings its gRPC connection every 10s even while idle, but the local
+# Milvus Lite server only allows idle pings every 5 minutes. Between questions
+# it answers with GOAWAY "too_many_pings" and gRPC logs an error, so only ping
+# while a request is actually in progress.
 vectorstore = Milvus(
     embedding_function=embedding,
     collection_name=COLLECTION_NAME,
-    connection_args={"uri": MILVUS_URI},
+    connection_args={
+        "uri": MILVUS_URI,
+        "grpc_options": {"grpc.keepalive_permit_without_calls": False},
+    },
 )
 
 from langchain_classic.chains import create_retrieval_chain
