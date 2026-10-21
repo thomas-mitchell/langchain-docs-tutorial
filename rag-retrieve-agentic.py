@@ -24,22 +24,16 @@ EMBED_MODEL_ID = "BAAI/bge-small-en-v1.5"
 # Must be served by a Hugging Face Inference Provider; Mixtral-8x7B no longer is.
 # Check a model page's "Inference Providers" panel before switching models.
 GEN_MODEL_ID = "openai/gpt-oss-20b"
-QUESTION = "How much nuyen does a Power focus cost?"
-# Joined with spaces: the commas make this a tuple of lines, not one string
-SYSTEM_PROMPT = " ".join((
-    "You are a helpful assistant that answers questions about Shadowrun 3rd edition",
-    "The currency used in Shadowrun 3rd edition is nuyen. If asked about the price",
-    "of any item assume the results from the context provided are in Nuyen, unless",
-    "specified otherwise (for example some items also cost Karma)",
-    "Your response will be printed in a console output, so only use plain text without any special characters.",
-    "Use search_documents when you need information from the knowledge base."
-))
-# The system prompt goes in the prompt as a system message; the model classes
-# don't take one. ChatHuggingFace sends both messages to the model's chat template.
-# PROMPT = ChatPromptTemplate.from_messages([
-#     ("system", SYSTEM_PROMPT),
-#     ("human", "Context information is below.\n---------------------\n{context}\n---------------------\nGiven the context information and not prior knowledge, answer the query.\nQuery: {input}\nAnswer:\n"),
-# ])
+SYSTEM_PROMPT = """\
+You are a helpful assistant that answers questions about Shadowrun 3rd edition.
+Your response will be printed in a console output, so only use plain text without any special characters.
+Use search_documents when you need information from the knowledge base.
+
+When answering using retrieved documents:
+- Cite each of your sources separately at the end of your answer.
+- ALWAYS include the page numbers for your sources.
+- Only cite sources actually returned by search_documents and were relevant to answering the query.
+"""
 TOP_K = 8
 # Database file created by rag-embed.py
 MILVUS_URI = "docling.db"
@@ -65,9 +59,6 @@ from langchain.agents import create_agent
 from langchain.tools import tool
 from langgraph.checkpoint.memory import InMemorySaver
 
-def clip_text(text, threshold=100):
-    return f"{text[:threshold]}..." if len(text) > threshold else text
-
 # LLMs (gpt-oss especially) like typographic characters that the PowerShell
 # console font or code page can't display, so swap them for plain ASCII.
 CONSOLE_SAFE_CHARS = str.maketrans({
@@ -89,6 +80,13 @@ sys.stdout.reconfigure(errors="replace")
 
 retriever = vectorstore.as_retriever(search_kwargs={"k": TOP_K})
 
+# Docling chunks have no "page" metadata key. Each chunk lists the document
+# items it was built from under dl_meta, and each item records the page(s) it
+# came from (already 1-based). A chunk can span more than one page.
+def get_page_numbers(doc):
+    doc_items = doc.metadata.get("dl_meta", {}).get("doc_items", [])
+    return sorted({prov["page_no"] for item in doc_items for prov in item.get("prov", [])})
+
 # Expose retrieval as a tool
 @tool
 def search_documents(query: str) -> str:
@@ -100,12 +98,33 @@ def search_documents(query: str) -> str:
         A lot of data in this knowledge base will be available in tables, including
         item prices. For that reason when searching for data especially item prices
         first try simply searching for the item name without additional context.
+        All prices will be in Nuyen (Shadowruns main currency) unless specified otherwise
+        (for example some items also cost Karma).
         Eg if you need to find the price of a cyberdeck search for 'Cyberdeck'
         instead of 'Cyberdeck price' or 'Cyberdeck cost'
     """
-    print(f"\nSearching vector DBfor: {query}")
+    print(f"\nSearching vector DBfor: {query}") # debugging info
     docs = retriever.invoke(query)
-    return "\n\n".join(doc.page_content for doc in docs)
+    # return "\n\n".join(doc.page_content for doc in docs)
+    results = []
+
+    for i, doc in enumerate(docs, start=1):
+        source = doc.metadata.get("source", "Unknown source")
+        pages = get_page_numbers(doc)
+
+        reference = f"Source {i}: {source}"
+
+        if pages:
+            label = "page" if len(pages) == 1 else "pages"
+            reference += f", {label} {', '.join(map(str, pages))}"
+
+        results.append(
+            f"{reference}\n{doc.page_content}"
+        )
+
+        
+
+    return "\n\n".join(results)
 
 # Configure the agent's checkpointer and thread ID (required for checkpointer)
 # checkpointer = InMemorySaver()
@@ -119,26 +138,16 @@ agent = create_agent(
     # checkpointer=checkpointer,
 )
 
-response = agent.invoke({
-    "messages": [
-        {"role": "user", "content": QUESTION}
-    ],
-})
+user_prompt = input("Enter your question: ")
+while user_prompt.strip():
+    response = agent.invoke({
+        "messages": [
+            {"role": "user", "content": user_prompt}
+        ],
+    })
 
-
-printed_response = console_safe(response["messages"][-1].content)
-
-print()
-print(printed_response)
-
-# clipped_answer = clip_text(resp_dict["answer"], threshold=650)
-# print(f"Question:\n{resp_dict['input']}\n\nAnswer:\n{clipped_answer}")
-# for i, doc in enumerate(resp_dict["context"]):
-#     print()
-#     print(f"Source {i + 1}:")
-#     print(f"  text: {json.dumps(clip_text(doc.page_content, threshold=650))}")
-#     for key in doc.metadata:
-#         if key != "pk":
-#             val = doc.metadata.get(key)
-#             clipped_val = clip_text(val) if isinstance(val, str) else val
-#             print(f"  {key}: {clipped_val}")
+    printed_response = console_safe(response["messages"][-1].content)
+    print()
+    print(printed_response)
+    
+    user_prompt = input("Enter your question: ")
