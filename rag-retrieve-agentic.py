@@ -1,5 +1,6 @@
 # Step 2 of 2: answers a question using the Milvus Lite database created by
 # rag-embed.py. Run rag-embed.py first; this script doesn't read the PDF.
+import asyncio
 import os
 import sys
 import json
@@ -103,7 +104,7 @@ def search_documents(query: str) -> str:
         Eg if you need to find the price of a cyberdeck search for 'Cyberdeck'
         instead of 'Cyberdeck price' or 'Cyberdeck cost'
     """
-    print(f"\nSearching vector DBfor: {query}") # debugging info
+    print(f"\nSearching Vector DB: {query}") # debugging info
     docs = retriever.invoke(query)
     # return "\n\n".join(doc.page_content for doc in docs)
     results = []
@@ -127,27 +128,34 @@ def search_documents(query: str) -> str:
     return "\n\n".join(results)
 
 # Configure the agent's checkpointer and thread ID (required for checkpointer)
-# checkpointer = InMemorySaver()
-# config = {"configurable": {"thread_id": "jira-mcp"}}
+checkpointer = InMemorySaver()
+config = {"configurable": {"thread_id": "jira-mcp"}}
 
 # Create an agent instead of a retrieval chain
 agent = create_agent(
     model="claude-sonnet-4-6",
     tools=[search_documents],
     system_prompt=SYSTEM_PROMPT,
-    # checkpointer=checkpointer,
+    checkpointer=checkpointer,
 )
 
-user_prompt = input("Enter your question: ")
-while user_prompt.strip():
-    response = agent.invoke({
-        "messages": [
-            {"role": "user", "content": user_prompt}
-        ],
-    })
-
-    printed_response = console_safe(response["messages"][-1].content)
-    print()
-    print(printed_response)
-    
+async def begin_prompting():
     user_prompt = input("Enter your question: ")
+
+    while user_prompt.strip():
+        response = await agent.ainvoke(
+            {
+                "messages": [
+                    {"role": "user", "content": user_prompt}
+                ]
+            },
+            config=config,
+        )
+
+        printed_response = console_safe(response["messages"][-1].content)
+        print()
+        print(printed_response)
+        
+        user_prompt = input("Enter your question: ")
+
+asyncio.run(begin_prompting())
