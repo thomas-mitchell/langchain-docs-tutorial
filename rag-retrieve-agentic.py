@@ -28,12 +28,13 @@ GEN_MODEL_ID = "openai/gpt-oss-20b"
 SYSTEM_PROMPT = """\
 You are a helpful assistant that answers questions about Shadowrun 3rd edition.
 Your response will be printed in a console output, so only use plain text without any special characters.
-Use search_documents when you need information from the knowledge base.
+Use search_documents when you need information from the knowledge base
+Use Tavily for web search if you cannot find the information in the knowledge base.
 
 When answering using retrieved documents:
 - Cite each of your sources separately at the end of your answer.
-- ALWAYS include the page numbers for your sources.
-- Only cite sources actually returned by search_documents and were relevant to answering the query.
+- Always include the page numbers for your sources if they were retrieved using search_documents
+- Only cite sources actually returned by search_documents or Tavily and were relevant to answering the query.
 """
 TOP_K = 8
 # Database file created by rag-embed.py
@@ -134,6 +135,10 @@ def search_documents(query: str) -> str:
 
     return "\n\n".join(results)
 
+# Web search. Reads TAVILY_API_KEY from the environment.
+from langchain_tavily import TavilySearch
+web_search = TavilySearch(max_results=5)
+
 # Configure the agent's checkpointer and thread ID (required for checkpointer)
 checkpointer = InMemorySaver()
 config = {"configurable": {"thread_id": "jira-mcp"}}
@@ -141,7 +146,7 @@ config = {"configurable": {"thread_id": "jira-mcp"}}
 # Create an agent instead of a retrieval chain
 agent = create_agent(
     model="claude-sonnet-4-6",
-    tools=[search_documents],
+    tools=[search_documents] + [web_search],
     system_prompt=SYSTEM_PROMPT,
     checkpointer=checkpointer,
 )
