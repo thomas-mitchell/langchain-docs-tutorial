@@ -139,9 +139,33 @@ def search_documents(query: str) -> str:
 from langchain_tavily import TavilySearch
 web_search = TavilySearch(max_results=5)
 
+# TavilySearch isn't our code, so print its debugging info from a callback
+# handler instead: LangChain calls it whenever a tool starts and finishes.
+from langchain_core.callbacks import BaseCallbackHandler
+
+class WebSearchLogger(BaseCallbackHandler):
+    def on_tool_start(self, serialized, input_str, *, inputs=None, **kwargs):
+        if (serialized or {}).get("name") == web_search.name:
+            print(f"\nSearching web: {(inputs or {}).get('query', input_str)}") # debugging info
+
+    def on_tool_end(self, output, *, name=None, **kwargs):
+        if name != web_search.name:
+            return
+        # The agent passes the result as a ToolMessage whose content is JSON
+        content = getattr(output, "content", output)
+        try:
+            results = json.loads(content).get("results", [])
+        except (TypeError, ValueError, AttributeError):
+            results = content.get("results", []) if isinstance(content, dict) else []
+        for i, result in enumerate(results, start=1):
+            print(f"Web result {i}: {result.get('url')}") # debugging info
+
 # Configure the agent's checkpointer and thread ID (required for checkpointer)
 checkpointer = InMemorySaver()
-config = {"configurable": {"thread_id": "jira-mcp"}}
+config = {
+    "configurable": {"thread_id": "jira-mcp"},
+    "callbacks": [WebSearchLogger()],
+}
 
 # Create an agent instead of a retrieval chain
 agent = create_agent(
